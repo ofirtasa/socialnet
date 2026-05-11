@@ -1,0 +1,13 @@
+# Copy this file to .env and fill in your values
+# ─── MongoDB Atlas ────────────────────────────────────────────────────────────
+# Replace with your actual MongoDB Atlas connection string
+# Format: mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?appName=<appName>
+MONGO_URI=your_connection_string_here
+
+# ─── Application ──────────────────────────────────────────────────────────────
+# JWT secret for session signing (generate a random 64-char string)
+JWT_SECRET=your_jwt_secret_here
+
+# ─── Server ───────────────────────────────────────────────────────────────────
+PORT=3000
+NODE_ENV=development
