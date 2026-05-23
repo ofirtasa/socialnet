@@ -57,6 +57,23 @@ http://localhost:3000
 
 (Or `3001`, `3002`, etc. if 3000 is busy.)
 
+**To run on a specific port:**
+
+- **macOS/Linux:**
+  ```bash
+  PORT=3100 npm run dev
+  ```
+
+- **Windows (PowerShell):**
+  ```powershell
+  $env:PORT=3100; npm run dev
+  ```
+
+- **Windows (Command Prompt):**
+  ```cmd
+  set PORT=3100 && npm run dev
+  ```
+
 **Option B: Production mode (After building)**
 
 ```bash
