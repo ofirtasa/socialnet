@@ -38,18 +38,21 @@ export default function Chat() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(targetUserId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // On mobile, if a conversation is selected, show chat view
-  const showChatOnMobile = !!selectedUserId;
+  // Bug 3 Fix: Get session token via tRPC (httpOnly cookie not accessible from JS)
+  const { data: sessionToken } = trpc.auth.getSessionToken.useQuery(undefined, {
+    enabled: !!user,
+    staleTime: 60_000,
+  });
 
   const { data: conversationPartners } = trpc.messages.conversationList.useQuery(
     { userId: user?.id ?? "" }, { enabled: !!user }
   );
-  const { data: dbMessages } = trpc.messages.conversation.useQuery(
+  const { data: dbMessages, refetch: refetchMessages } = trpc.messages.conversation.useQuery(
     { userId1: user?.id ?? "", userId2: selectedUserId ?? "" },
     { enabled: !!user && !!selectedUserId }
   );
@@ -60,49 +63,91 @@ export default function Chat() {
     { userId: user?.id ?? "" }, { enabled: !!user }
   );
 
+  // Initialize socket and authenticate when token is available
+  useEffect(() => {
+    if (!user || !sessionToken) return;
+
+    const s = getSocket();
+
+    const handleConnect = () => {
+      setConnected(true);
+      // Authenticate using the server-provided token
+      s.emit("authenticate", sessionToken);
+    };
+
+    const handleAuthenticated = (data: { userId: string; name: string }) => {
+      setAuthenticated(true);
+      console.log("[Chat] Authenticated as", data.name);
+    };
+
+    const handleDisconnect = () => {
+      setConnected(false);
+      setAuthenticated(false);
+    };
+
+    s.on("connect", handleConnect);
+    s.on("authenticated", handleAuthenticated);
+    s.on("disconnect", handleDisconnect);
+
+    // If already connected, authenticate immediately
+    if (s.connected) {
+      setConnected(true);
+      s.emit("authenticate", sessionToken);
+    } else {
+      s.connect();
+    }
+
+    return () => {
+      s.off("connect", handleConnect);
+      s.off("authenticated", handleAuthenticated);
+      s.off("disconnect", handleDisconnect);
+    };
+  }, [user, sessionToken]);
+
+  // Listen for messages
   useEffect(() => {
     if (!user) return;
     const s = getSocket();
 
-    s.on("connect", () => {
-      setConnected(true);
-      const token = document.cookie
-        .split(";")
-        .find((c) => c.trim().startsWith("sn_session="))
-        ?.split("=")[1]?.trim();
-      if (token) s.emit("authenticate", token);
-    });
-
-    s.on("disconnect", () => setConnected(false));
-
-    s.on("new_message", (msg: ChatMessage) => {
+    const handleNewMessage = (msg: ChatMessage) => {
       if (String(msg.senderId) === selectedUserId || String(msg.receiverId) === selectedUserId) {
-        setMessages((prev) => [...prev, msg]);
+        setMessages((prev) => {
+          // Avoid duplicates
+          const exists = prev.some(m => m.createdAt === msg.createdAt && m.senderId === msg.senderId && m.content === msg.content);
+          return exists ? prev : [...prev, msg];
+        });
       }
-    });
+    };
 
-    s.on("message_sent", (msg: ChatMessage) => {
-      setMessages((prev) => [...prev, msg]);
-    });
+    const handleMessageSent = (msg: ChatMessage) => {
+      setMessages((prev) => {
+        const exists = prev.some(m => m.createdAt === msg.createdAt && m.senderId === msg.senderId && m.content === msg.content);
+        return exists ? prev : [...prev, msg];
+      });
+    };
 
-    s.on("user_typing", (data: { userId: string }) => {
+    const handleTyping = (data: { userId: string }) => {
       if (String(data.userId) === selectedUserId) setIsTyping(true);
-    });
+    };
 
-    s.on("user_stop_typing", (data: { userId: string }) => {
+    const handleStopTyping = (data: { userId: string }) => {
       if (String(data.userId) === selectedUserId) setIsTyping(false);
-    });
+    };
 
-    if (!s.connected) s.connect();
+    s.on("new_message", handleNewMessage);
+    s.on("message_sent", handleMessageSent);
+    s.on("user_typing", handleTyping);
+    s.on("user_stop_typing", handleStopTyping);
 
     return () => {
-      s.off("new_message");
-      s.off("message_sent");
-      s.off("user_typing");
-      s.off("user_stop_typing");
+      s.off("new_message", handleNewMessage);
+      s.off("message_sent", handleMessageSent);
+      s.off("user_typing", handleTyping);
+      s.off("user_stop_typing", handleStopTyping);
     };
   }, [user, selectedUserId]);
 
+  // Load DB messages when conversation changes
   useEffect(() => {
     if (dbMessages) {
       setMessages(
@@ -116,12 +161,19 @@ export default function Chat() {
     }
   }, [dbMessages]);
 
+  // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const sendMessage = () => {
     if (!input.trim() || !user || !selectedUserId) return;
+
+    if (!authenticated) {
+      toast_error("Not connected to chat. Please wait...");
+      return;
+    }
+
     const s = getSocket();
     s.emit("private_message", { receiverId: selectedUserId, content: input.trim() });
     setInput("");
@@ -131,7 +183,7 @@ export default function Chat() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
-    if (!selectedUserId) return;
+    if (!selectedUserId || !authenticated) return;
     const s = getSocket();
     s.emit("typing", { receiverId: selectedUserId });
     clearTimeout(typingTimeout.current);
@@ -162,18 +214,21 @@ export default function Chat() {
     </Layout>
   );
 
+  const showChatOnMobile = !!selectedUserId;
+
   return (
     <Layout>
-      {/* Full height chat container */}
       <div className="flex" style={{ height: "calc(100dvh - 56px - 64px)" }}>
 
-        {/* ── Conversation List ──────────────────────────────────────────── */}
+        {/* Conversation List */}
         <div className={`${showChatOnMobile ? "hidden lg:flex" : "flex"} lg:flex flex-col w-full lg:w-72 border-r border-border bg-card`}>
           <div className="p-4 border-b border-border">
             <h2 className="font-bold text-lg" style={{ fontFamily: "'SocialNetDisplay', 'Playfair Display', serif" }}>Messages</h2>
             <div className="flex items-center gap-1.5 mt-1">
-              <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-gray-400"}`} />
-              <span className="text-xs text-muted-foreground">{connected ? "Connected" : "Connecting..."}</span>
+              <div className={`w-2 h-2 rounded-full ${authenticated ? "bg-green-500" : connected ? "bg-yellow-500" : "bg-gray-400"}`} />
+              <span className="text-xs text-muted-foreground">
+                {authenticated ? "Connected" : connected ? "Authenticating..." : "Connecting..."}
+              </span>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto p-2">
@@ -195,17 +250,13 @@ export default function Chat() {
           </div>
         </div>
 
-        {/* ── Chat Area ─────────────────────────────────────────────────── */}
+        {/* Chat Area */}
         <div className={`${showChatOnMobile ? "flex" : "hidden lg:flex"} flex-1 flex-col`}>
           {selectedUserId && targetUser ? (
             <>
-              {/* Chat Header */}
+              {/* Header */}
               <div className="p-3 sm:p-4 border-b border-border flex items-center gap-3 bg-card">
-                {/* Back button on mobile */}
-                <button
-                  onClick={() => { setSelectedUserId(null); navigate("/chat"); }}
-                  className="lg:hidden p-1.5 rounded-xl hover:bg-secondary transition-colors text-muted-foreground flex-shrink-0"
-                >
+                <button onClick={() => { setSelectedUserId(null); navigate("/chat"); }} className="lg:hidden p-1.5 rounded-xl hover:bg-secondary transition-colors text-muted-foreground flex-shrink-0">
                   <ArrowLeft size={20} />
                 </button>
                 <Link href={`/profile/${selectedUserId}`}>
@@ -274,19 +325,24 @@ export default function Chat() {
 
               {/* Input */}
               <div className="p-3 sm:p-4 border-t border-border bg-card">
+                {!authenticated && (
+                  <p className="text-xs text-muted-foreground text-center mb-2">
+                    {connected ? "Authenticating..." : "Connecting to chat..."}
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <input
-                    ref={inputRef}
                     value={input}
                     onChange={handleInputChange}
                     onKeyDown={handleKeyDown}
-                    placeholder="Type a message..."
+                    placeholder={authenticated ? "Type a message..." : "Connecting..."}
                     className="sn-input flex-1"
+                    disabled={!authenticated}
                     autoComplete="off"
                   />
                   <button
                     onClick={sendMessage}
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || !authenticated}
                     className="sn-btn sn-btn-primary px-4 flex-shrink-0"
                   >
                     <Send size={16} />
@@ -307,6 +363,11 @@ export default function Chat() {
       </div>
     </Layout>
   );
+}
+
+// Inline toast for non-blocking error
+function toast_error(msg: string) {
+  console.error("[Chat]", msg);
 }
 
 function ConversationItem({ userId, isSelected, onClick }: { userId: string; isSelected: boolean; onClick: () => void }) {

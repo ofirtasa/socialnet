@@ -148,6 +148,16 @@ const authRouter = router({
     return { success: true };
   }),
 
+  // Returns the raw session token so the frontend can pass it to Socket.io
+  // (httpOnly cookies are not accessible from JS)
+  getSessionToken: publicProcedure.query(async ({ ctx }) => {
+    const token = ctx.req.cookies?.sn_session;
+    if (!token) return null;
+    const session = await getSessionByToken(token);
+    if (!session || session.expiresAt < new Date()) return null;
+    return token;
+  }),
+
   getLocalUser: publicProcedure.query(async ({ ctx }) => {
     const token = ctx.req.cookies?.sn_session;
     if (!token) return null;

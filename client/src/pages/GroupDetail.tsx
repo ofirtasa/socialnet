@@ -4,9 +4,133 @@ import { trpc } from "@/lib/trpc";
 import { useLocalAuth } from "@/contexts/AuthContext";
 import Layout from "@/components/Layout";
 import { toast } from "sonner";
-import { Users, Lock, Globe, Check, X, Settings, Shield, UserMinus, Crown, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, Lock, Globe, Check, X, Settings, Shield, UserMinus, Crown, ChevronDown, ChevronUp, Image, Video, Send } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "wouter";
+
+// ─── Create Post in Group ─────────────────────────────────────────────────────
+function GroupCreatePost({ userId, groupId, onSuccess }: { userId: string; groupId: string; onSuccess: () => void }) {
+  const [content, setContent] = useState("");
+  const [postType, setPostType] = useState<"text" | "image" | "video">("text");
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [showMedia, setShowMedia] = useState(false);
+  const { data: me } = trpc.users.getById.useQuery({ id: userId }, { staleTime: 300_000 });
+
+  const createMutation = trpc.posts.create.useMutation({
+    onSuccess: () => {
+      setContent(""); setMediaUrl(""); setShowMedia(false); setPostType("text");
+      toast.success("Post published!");
+      onSuccess();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!content.trim()) return;
+    createMutation.mutate({
+      authorId: userId,
+      groupId,
+      content: content.trim(),
+      postType,
+      imageUrl: postType === "image" && mediaUrl.trim() ? mediaUrl.trim() : undefined,
+      videoUrl: postType === "video" && mediaUrl.trim() ? mediaUrl.trim() : undefined,
+    });
+  };
+
+  return (
+    <div className="sn-card p-4 mb-4">
+      <div className="flex gap-3">
+        <img
+          src={me?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`}
+          alt=""
+          className="sn-avatar flex-shrink-0"
+          style={{ width: 38, height: 38 }}
+          onError={(e) => { e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${me?.name || "U"}`; }}
+        />
+        <div className="flex-1 min-w-0">
+          <form onSubmit={handleSubmit}>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Write something in this group..."
+              className="sn-input resize-none text-sm w-full"
+              rows={2}
+            />
+            {showMedia && (
+              <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                <select
+                  value={postType}
+                  onChange={(e) => setPostType(e.target.value as "image" | "video")}
+                  className="sn-input text-sm"
+                  style={{ width: "auto", minWidth: 100 }}
+                >
+                  <option value="image">Image URL</option>
+                  <option value="video">Video URL</option>
+                </select>
+                <input
+                  value={mediaUrl}
+                  onChange={(e) => setMediaUrl(e.target.value)}
+                  placeholder="Paste media URL here..."
+                  className="sn-input flex-1 text-sm"
+                />
+              </div>
+            )}
+            <div className="flex items-center justify-between mt-2">
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowMedia(true); setPostType("image"); }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-2 py-1.5 rounded-lg hover:bg-secondary"
+                >
+                  <Image size={14} /> <span className="hidden sm:inline">Photo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowMedia(true); setPostType("video"); }}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-2 py-1.5 rounded-lg hover:bg-secondary"
+                >
+                  <Video size={14} /> <span className="hidden sm:inline">Video</span>
+                </button>
+              </div>
+              <button
+                type="submit"
+                disabled={!content.trim() || createMutation.isPending}
+                className="sn-btn sn-btn-primary text-xs px-4 py-2"
+              >
+                {createMutation.isPending ? "Posting..." : "Post"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Cover Image with fallback (Bug 2 fix) ───────────────────────────────────
+function GroupCover({ coverUrl, name }: { coverUrl?: string | null; name: string }) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  if (coverUrl && !imgFailed) {
+    return (
+      <img
+        src={coverUrl}
+        alt={name}
+        className="w-full h-40 sm:h-52 object-cover"
+        onError={() => setImgFailed(true)}
+      />
+    );
+  }
+  return (
+    <div
+      className="w-full h-40 sm:h-52 flex items-center justify-center text-white text-6xl font-bold"
+      style={{ background: "linear-gradient(135deg, oklch(0.55 0.22 264), oklch(0.6 0.2 290))" }}
+    >
+      {name[0]}
+    </div>
+  );
+}
 
 export default function GroupDetail() {
   const params = useParams<{ id: string }>();
@@ -17,7 +141,7 @@ export default function GroupDetail() {
   const [editForm, setEditForm] = useState({ name: "", description: "", isPrivate: false });
 
   const { data: group, refetch } = trpc.groups.getById.useQuery({ id: groupId }, { enabled: !!groupId });
-  const { data: posts } = trpc.posts.byGroup.useQuery({ groupId }, { enabled: !!groupId });
+  const { data: posts, refetch: refetchPosts } = trpc.posts.byGroup.useQuery({ groupId }, { enabled: !!groupId });
   const { data: membership } = trpc.groups.membership.useQuery({ groupId, userId: user?.id ?? "" }, { enabled: !!user });
   const { data: pendingRequests } = trpc.groups.pendingRequests.useQuery(
     { groupId },
@@ -36,6 +160,7 @@ export default function GroupDetail() {
   const isPending = membership?.status === "pending";
   const isManager = group?.managerId === user?.id;
   const isAdmin = isManager || membership?.role === "admin";
+  const canPost = isMember || isAdmin;
 
   if (!group) return (
     <Layout>
@@ -48,15 +173,9 @@ export default function GroupDetail() {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
-        {/* Cover */}
+        {/* Cover — Bug 2 fixed */}
         <div className="relative">
-          {group.coverUrl ? (
-            <img src={group.coverUrl} alt="" className="w-full h-40 sm:h-52 object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-          ) : (
-            <div className="w-full h-40 sm:h-52 flex items-center justify-center text-white text-6xl font-bold" style={{ background: "linear-gradient(135deg, oklch(0.55 0.22 264), oklch(0.6 0.2 290))" }}>
-              {group.name[0]}
-            </div>
-          )}
+          <GroupCover coverUrl={group.coverUrl} name={group.name} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
           <div className="absolute bottom-3 left-4 text-white">
             <h1 className="text-xl sm:text-2xl font-bold" style={{ fontFamily: "'SocialNetDisplay', 'Playfair Display', serif", textShadow: "0 2px 8px rgba(0,0,0,0.4)" }}>{group.name}</h1>
@@ -84,7 +203,6 @@ export default function GroupDetail() {
         </div>
 
         <div className="px-4 py-4 sm:py-6">
-          {/* Description */}
           {group.description && (
             <div className="sn-card p-4 mb-4">
               <p className="text-sm text-muted-foreground">{group.description}</p>
@@ -92,23 +210,27 @@ export default function GroupDetail() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Posts */}
+            {/* Posts — Bug 1 fixed: show create post form for members */}
             <div className="lg:col-span-2">
+              {canPost && user && (
+                <GroupCreatePost userId={user.id} groupId={groupId} onSuccess={() => refetchPosts()} />
+              )}
+              {!canPost && !user && (
+                <div className="sn-card p-4 mb-4 text-center text-sm text-muted-foreground">
+                  Join this group to post
+                </div>
+              )}
+
               <h2 className="text-base sm:text-lg font-semibold mb-3">Posts</h2>
               {posts?.length === 0 && (
                 <div className="text-center py-10 text-muted-foreground">
                   <p className="text-3xl mb-2">📝</p>
-                  <p className="text-sm">No posts yet</p>
+                  <p className="text-sm">No posts yet{canPost ? " — be the first!" : ""}</p>
                 </div>
               )}
               <div className="space-y-3">
                 {posts?.map((post: any) => (
-                  <div key={post.id} className="sn-card p-4 fade-in">
-                    <p className="text-sm leading-relaxed">{post.content}</p>
-                    {post.imageUrl && <img src={post.imageUrl} alt="" className="w-full rounded-xl mt-3 max-h-60 object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
-                    {post.videoUrl && <video src={post.videoUrl} controls playsInline className="w-full rounded-xl mt-3 max-h-60" onError={(e) => { e.currentTarget.style.display = "none"; }} />}
-                    <p className="text-xs text-muted-foreground mt-2">{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })} · {post.likesCount} likes</p>
-                  </div>
+                  <GroupPostCard key={post.id} post={post} currentUserId={user?.id ?? null} onRefresh={refetchPosts} />
                 ))}
               </div>
             </div>
@@ -194,6 +316,49 @@ export default function GroupDetail() {
   );
 }
 
+// ─── Group Post Card ──────────────────────────────────────────────────────────
+function GroupPostCard({ post, currentUserId, onRefresh }: { post: any; currentUserId: string | null; onRefresh: () => void }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const [vidFailed, setVidFailed] = useState(false);
+  const { data: author } = trpc.users.getById.useQuery({ id: post.authorId }, { staleTime: 300_000, retry: false });
+  const deleteMutation = trpc.posts.delete.useMutation({ onSuccess: () => { toast.success("Post deleted"); onRefresh(); } });
+
+  return (
+    <div className="sn-card p-4 fade-in">
+      <div className="flex items-start justify-between mb-2">
+        <Link href={`/profile/${post.authorId}`}>
+          <div className="flex items-center gap-2 cursor-pointer">
+            <img
+              src={author?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.authorId}`}
+              alt=""
+              className="sn-avatar"
+              style={{ width: 32, height: 32 }}
+              onError={(e) => { e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${author?.name || "U"}`; }}
+            />
+            <div>
+              <p className="text-xs font-semibold">{author?.name || "User"}</p>
+              <p className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</p>
+            </div>
+          </div>
+        </Link>
+        {currentUserId === post.authorId && (
+          <button onClick={() => { if (confirm("Delete this post?")) deleteMutation.mutate({ id: post.id }); }} className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      <p className="text-sm leading-relaxed mb-2">{post.content}</p>
+      {post.imageUrl && !imgFailed && (
+        <img src={post.imageUrl} alt="" className="w-full rounded-xl max-h-60 object-cover" onError={() => setImgFailed(true)} />
+      )}
+      {post.videoUrl && !vidFailed && (
+        <video src={post.videoUrl} controls playsInline className="w-full rounded-xl max-h-60" onError={() => setVidFailed(true)} />
+      )}
+      <p className="text-xs text-muted-foreground mt-2">{post.likesCount} likes · {post.commentsCount} comments</p>
+    </div>
+  );
+}
+
 function MemberItem({ member, groupId, isAdmin, currentUserId, managerId, onRefresh }: {
   member: any; groupId: string; isAdmin: boolean; currentUserId?: string; managerId: string; onRefresh: () => void;
 }) {
@@ -225,17 +390,10 @@ function MemberItem({ member, groupId, isAdmin, currentUserId, managerId, onRefr
       </div>
       {canManage && (
         <div className="flex gap-1 flex-shrink-0">
-          <button
-            onClick={() => setRoleMutation.mutate({ groupId, userId: String(member.userId), role: member.role === "admin" ? "member" : "admin" })}
-            title={member.role === "admin" ? "Demote" : "Promote"}
-            className="w-6 h-6 rounded-lg bg-secondary hover:bg-border flex items-center justify-center transition-colors"
-          >
+          <button onClick={() => setRoleMutation.mutate({ groupId, userId: String(member.userId), role: member.role === "admin" ? "member" : "admin" })} title={member.role === "admin" ? "Demote" : "Promote"} className="w-6 h-6 rounded-lg bg-secondary hover:bg-border flex items-center justify-center transition-colors">
             <Shield size={11} />
           </button>
-          <button
-            onClick={() => { if (confirm("Remove this member?")) removeMutation.mutate({ groupId, userId: String(member.userId) }); }}
-            className="w-6 h-6 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors dark:bg-red-900/20"
-          >
+          <button onClick={() => { if (confirm("Remove this member?")) removeMutation.mutate({ groupId, userId: String(member.userId) }); }} className="w-6 h-6 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 flex items-center justify-center transition-colors dark:bg-red-900/20">
             <UserMinus size={11} />
           </button>
         </div>

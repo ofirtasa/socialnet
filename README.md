@@ -1,4 +1,4 @@
-﻿# SocialNet — Full-Stack Social Network Application
+# SocialNet — Full-Stack Social Network Application
 
 A full-featured social network built with **Node.js + Express + React + MongoDB Atlas**, developed as a final project for the Android 2 course.
 
@@ -40,29 +40,29 @@ A full-featured social network built with **Node.js + Express + React + MongoDB 
 ```
 socialnet/
 ├── server/
-│   ├── mongodb.ts ← Mongoose models (User, Post, Comment, Like, Group, Message, Friendship, Session)
-│   ├── db.ts ← Database query helpers (Model layer)
-│   ├── routers.ts ← tRPC procedures / API routes (Controller layer)
-│   ├── seed.ts ← Demo data seeder
-│   └── _core/ ← Framework: auth, context, Socket.io, OAuth
+│   ├── mongodb.ts          ← Mongoose models (User, Post, Comment, Like, Group, Message, Friendship, Session)
+│   ├── db.ts               ← Database query helpers (Model layer)
+│   ├── routers.ts          ← tRPC procedures / API routes (Controller layer)
+│   ├── seed.ts             ← Demo data seeder
+│   └── _core/              ← Framework: auth, context, Socket.io, OAuth
 ├── client/src/
-│   ├── pages/ ← React page components (View layer)
-│   │   ├── Feed.tsx ← Main feed with post CRUD
-│   │   ├── Chat.tsx ← Real-time Socket.io chat
-│   │   ├── Groups.tsx ← Group browsing and creation
+│   ├── pages/              ← React page components (View layer)
+│   │   ├── Feed.tsx        ← Main feed with post CRUD
+│   │   ├── Chat.tsx        ← Real-time Socket.io chat
+│   │   ├── Groups.tsx      ← Group browsing and creation
 │   │   ├── GroupDetail.tsx ← Group management (admin roles)
-│   │   ├── Friends.tsx ← Friend requests and list
-│   │   ├── Profile.tsx ← User profile + canvas avatar editor
-│   │   ├── Stats.tsx ← D3.js statistics dashboard
-│   │   ├── Search.tsx ← Advanced multi-param search
-│   │   └── AdminPanel.tsx ← Admin CRUD + seed trigger
+│   │   ├── Friends.tsx     ← Friend requests and list
+│   │   ├── Profile.tsx     ← User profile + canvas avatar editor
+│   │   ├── Stats.tsx       ← D3.js statistics dashboard
+│   │   ├── Search.tsx      ← Advanced multi-param search
+│   │   └── AdminPanel.tsx  ← Admin CRUD + seed trigger
 │   ├── components/
-│   │   └── Layout.tsx ← Sidebar navigation + dark mode toggle
+│   │   └── Layout.tsx      ← Sidebar navigation + dark mode toggle
 │   └── contexts/
-│       ├── AuthContext.tsx ← Local session state
+│       ├── AuthContext.tsx  ← Local session state
 │       └── ThemeContext.tsx ← Dark/light mode with localStorage
-├── drizzle/schema.ts ← (Legacy MySQL schema — kept for reference)
-├── .env.example ← Environment variable template
+├── drizzle/schema.ts       ← (Legacy MySQL schema — kept for reference)
+├── .env.example            ← Environment variable template
 └── README.md
 ```
 
@@ -93,7 +93,7 @@ socialnet/
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/ofirtasa/socialnet.git
+git clone <your-repo-url>
 cd socialnet
 pnpm install
 ```
@@ -110,9 +110,6 @@ Edit `.env`:
 
 ```
 MONGO_URI=mongodb+srv://your_user:your_password@your-cluster.mongodb.net/?appName=your-app-name
-JWT_SECRET=your_jwt_secret_here
-PORT=3000
-NODE_ENV=development
 ```
 
 > **Important:** Never commit `.env` to Git. It is already in `.gitignore`.

@@ -12,13 +12,14 @@ import { formatDistanceToNow } from "date-fns";
 
 type PostType = "text" | "image" | "video" | "canvas";
 
+// ─── Bug 4 Fix: Media component with proper state-based error handling ────────
 function PostMedia({ imageUrl, videoUrl }: { imageUrl?: string | null; videoUrl?: string | null }) {
   const [imgError, setImgError] = useState(false);
   const [vidError, setVidError] = useState(false);
 
   if (imageUrl && !imgError) {
     return (
-      <div className="mb-3 rounded-xl overflow-hidden -mx-5 sm:mx-0">
+      <div className="mb-3 -mx-5 sm:mx-0 rounded-none sm:rounded-xl overflow-hidden">
         <img
           src={imageUrl}
           alt="Post media"
@@ -44,7 +45,7 @@ function PostMedia({ imageUrl, videoUrl }: { imageUrl?: string | null; videoUrl?
   if ((imageUrl && imgError) || (videoUrl && vidError)) {
     return (
       <div className="mb-3 p-3 bg-secondary rounded-xl text-xs text-muted-foreground flex items-center gap-2">
-        <span>⚠️</span> Media could not be loaded
+        <span>⚠️</span> Media could not be loaded — check the URL
       </div>
     );
   }
@@ -109,24 +110,15 @@ function PostCard({ post, currentUserId, onRefresh }: { post: any; currentUserId
         </Link>
         {currentUserId === post.authorId && (
           <div className="relative">
-            <button
-              onClick={() => setShowMenu(!showMenu)}
-              className="p-2 rounded-xl hover:bg-secondary transition-colors text-muted-foreground"
-            >
+            <button onClick={() => setShowMenu(!showMenu)} className="p-2 rounded-xl hover:bg-secondary transition-colors text-muted-foreground">
               <MoreHorizontal size={18} />
             </button>
             {showMenu && (
               <div className="absolute right-0 top-10 bg-card border border-border rounded-2xl shadow-xl py-1 z-20 min-w-[140px]">
-                <button
-                  onClick={() => { setEditMode(true); setEditContent(post.content); setShowMenu(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-secondary transition-colors"
-                >
+                <button onClick={() => { setEditMode(true); setEditContent(post.content); setShowMenu(false); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-secondary transition-colors">
                   <Edit2 size={14} /> Edit Post
                 </button>
-                <button
-                  onClick={() => { deleteMutation.mutate({ id: post.id }); setShowMenu(false); }}
-                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                >
+                <button onClick={() => { deleteMutation.mutate({ id: post.id }); setShowMenu(false); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors">
                   <Trash2 size={14} /> Delete
                 </button>
               </div>
@@ -138,41 +130,26 @@ function PostCard({ post, currentUserId, onRefresh }: { post: any; currentUserId
       {/* Content */}
       {editMode ? (
         <div className="mb-3">
-          <textarea
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            className="sn-input resize-none text-sm w-full"
-            rows={3}
-            autoFocus
-          />
+          <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} className="sn-input resize-none text-sm w-full" rows={3} autoFocus />
           <div className="flex gap-2 mt-2">
-            <button onClick={() => updateMutation.mutate({ id: post.id, content: editContent.trim() })} disabled={updateMutation.isPending} className="sn-btn sn-btn-primary text-xs px-3 py-2 flex items-center gap-1">
-              <Check size={13} /> Save
-            </button>
-            <button onClick={() => setEditMode(false)} className="text-xs px-3 py-2 rounded-xl border border-border hover:bg-secondary transition-colors flex items-center gap-1">
-              <X size={13} /> Cancel
-            </button>
+            <button onClick={() => updateMutation.mutate({ id: post.id, content: editContent.trim() })} disabled={updateMutation.isPending} className="sn-btn sn-btn-primary text-xs px-3 py-2 flex items-center gap-1"><Check size={13} /> Save</button>
+            <button onClick={() => setEditMode(false)} className="text-xs px-3 py-2 rounded-xl border border-border hover:bg-secondary transition-colors flex items-center gap-1"><X size={13} /> Cancel</button>
           </div>
         </div>
       ) : (
         <p className="text-sm leading-relaxed mb-3 whitespace-pre-wrap">{post.content}</p>
       )}
 
+      {/* Bug 4 Fix: Media renders correctly */}
       <PostMedia imageUrl={post.imageUrl} videoUrl={post.videoUrl} />
 
       {/* Actions */}
       <div className="flex items-center gap-5 pt-3 border-t border-border">
-        <button
-          onClick={handleLike}
-          className={`flex items-center gap-1.5 text-sm transition-all duration-150 ${isLiked ? "text-red-500" : "text-muted-foreground hover:text-red-400"}`}
-        >
+        <button onClick={handleLike} className={`flex items-center gap-1.5 text-sm transition-all duration-150 ${isLiked ? "text-red-500" : "text-muted-foreground hover:text-red-400"}`}>
           <Heart size={18} fill={isLiked ? "currentColor" : "none"} />
           <span className="font-medium">{post.likesCount || 0}</span>
         </button>
-        <button
-          onClick={() => setShowComments(!showComments)}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
-        >
+        <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors">
           <MessageCircle size={18} />
           <span className="font-medium">{post.commentsCount || 0}</span>
           {showComments ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -185,15 +162,8 @@ function PostCard({ post, currentUserId, onRefresh }: { post: any; currentUserId
           {comments?.map((c: any) => <CommentItem key={c.id} comment={c} />)}
           {currentUserId && (
             <form onSubmit={handleComment} className="flex gap-2 mt-3">
-              <input
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Write a comment..."
-                className="sn-input flex-1 text-sm py-2"
-              />
-              <button type="submit" disabled={!comment.trim()} className="sn-btn sn-btn-primary px-3 py-2">
-                <Send size={14} />
-              </button>
+              <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Write a comment..." className="sn-input flex-1 text-sm py-2" />
+              <button type="submit" disabled={!comment.trim()} className="sn-btn sn-btn-primary px-3 py-2"><Send size={14} /></button>
             </form>
           )}
         </div>
@@ -206,13 +176,7 @@ function CommentItem({ comment }: { comment: any }) {
   const { data: author } = trpc.users.getById.useQuery({ id: comment.authorId }, { staleTime: 300_000, retry: false });
   return (
     <div className="flex gap-2 items-start">
-      <img
-        src={author?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.authorId}`}
-        alt=""
-        className="sn-avatar flex-shrink-0"
-        style={{ width: 28, height: 28 }}
-        onError={(e) => { e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${author?.name || "U"}`; }}
-      />
+      <img src={author?.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.authorId}`} alt="" className="sn-avatar flex-shrink-0" style={{ width: 28, height: 28 }} onError={(e) => { e.currentTarget.src = `https://api.dicebear.com/7.x/initials/svg?seed=${author?.name || "U"}`; }} />
       <div className="flex-1 bg-secondary rounded-xl px-3 py-2">
         <p className="text-xs font-semibold mb-0.5">{author?.name || "User"}</p>
         <p className="text-xs text-muted-foreground">{comment.content}</p>
@@ -221,16 +185,17 @@ function CommentItem({ comment }: { comment: any }) {
   );
 }
 
+// ─── Bug 4 Fix: CreatePost with correct postType and media URL handling ────────
 function CreatePost({ userId, onSuccess }: { userId: string; onSuccess: () => void }) {
   const [content, setContent] = useState("");
-  const [postType, setPostType] = useState<PostType>("text");
+  const [mediaType, setMediaType] = useState<"image" | "video">("image");
   const [mediaUrl, setMediaUrl] = useState("");
   const [showMedia, setShowMedia] = useState(false);
   const { data: me } = trpc.users.getById.useQuery({ id: userId }, { staleTime: 300_000 });
 
   const createMutation = trpc.posts.create.useMutation({
     onSuccess: () => {
-      setContent(""); setMediaUrl(""); setShowMedia(false); setPostType("text");
+      setContent(""); setMediaUrl(""); setShowMedia(false); setMediaType("image");
       toast.success("Post published!");
       onSuccess();
     },
@@ -240,12 +205,17 @@ function CreatePost({ userId, onSuccess }: { userId: string; onSuccess: () => vo
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
+
+    // Determine postType based on whether media URL is provided
+    const hasMedia = showMedia && mediaUrl.trim();
+    const postType: PostType = hasMedia ? mediaType : "text";
+
     createMutation.mutate({
       authorId: userId,
       content: content.trim(),
       postType,
-      imageUrl: postType === "image" ? mediaUrl || undefined : undefined,
-      videoUrl: postType === "video" ? mediaUrl || undefined : undefined,
+      imageUrl: hasMedia && mediaType === "image" ? mediaUrl.trim() : undefined,
+      videoUrl: hasMedia && mediaType === "video" ? mediaUrl.trim() : undefined,
     });
   };
 
@@ -268,39 +238,55 @@ function CreatePost({ userId, onSuccess }: { userId: string; onSuccess: () => vo
               className="sn-input resize-none text-sm w-full"
               rows={3}
             />
+
+            {/* Media URL input — shown when Photo or Video is clicked */}
             {showMedia && (
-              <div className="mt-2 flex flex-col sm:flex-row gap-2">
-                <select
-                  value={postType}
-                  onChange={(e) => setPostType(e.target.value as PostType)}
-                  className="sn-input text-sm"
-                  style={{ width: "auto", minWidth: 100 }}
-                >
-                  <option value="image">Image URL</option>
-                  <option value="video">Video URL</option>
-                </select>
+              <div className="mt-2 space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMediaType("image")}
+                    className={`flex-1 py-1.5 text-xs rounded-xl border transition-colors ${mediaType === "image" ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-secondary"}`}
+                  >
+                    📷 Image
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMediaType("video")}
+                    className={`flex-1 py-1.5 text-xs rounded-xl border transition-colors ${mediaType === "video" ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-secondary"}`}
+                  >
+                    🎥 Video
+                  </button>
+                </div>
                 <input
                   value={mediaUrl}
                   onChange={(e) => setMediaUrl(e.target.value)}
-                  placeholder="Paste URL..."
-                  className="sn-input flex-1 text-sm"
+                  placeholder={mediaType === "image" ? "Paste image URL (https://...)" : "Paste video URL (https://...)"}
+                  className="sn-input text-sm w-full"
+                  type="url"
                 />
+                {mediaUrl && (
+                  <div className="text-xs text-muted-foreground flex items-center gap-1">
+                    <span className="text-green-500">✓</span> URL entered — will be shown in post
+                  </div>
+                )}
               </div>
             )}
+
             <div className="flex items-center justify-between mt-3">
               <div className="flex gap-1">
                 <button
                   type="button"
-                  onClick={() => { setShowMedia(!showMedia); setPostType("image"); }}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-2.5 py-2 rounded-xl hover:bg-secondary"
+                  onClick={() => { setShowMedia(!showMedia); setMediaType("image"); }}
+                  className={`flex items-center gap-1 text-xs transition-colors px-2.5 py-2 rounded-xl hover:bg-secondary ${showMedia && mediaType === "image" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary"}`}
                 >
                   <Image size={15} />
                   <span className="hidden sm:inline">Photo</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setShowMedia(!showMedia); setPostType("video"); }}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors px-2.5 py-2 rounded-xl hover:bg-secondary"
+                  onClick={() => { setShowMedia(!showMedia); setMediaType("video"); }}
+                  className={`flex items-center gap-1 text-xs transition-colors px-2.5 py-2 rounded-xl hover:bg-secondary ${showMedia && mediaType === "video" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-primary"}`}
                 >
                   <Video size={15} />
                   <span className="hidden sm:inline">Video</span>

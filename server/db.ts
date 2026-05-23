@@ -456,9 +456,9 @@ export async function getGroupMembers(groupId: string) {
 export async function getGroupMembership(groupId: string, userId: string) {
   await db();
   const group = await GroupModel.findById(groupId);
-  if (!group) return undefined;
+  if (!group) return null;
   const member = group.members.find((m: any) => m.userId.toString() === userId);
-  if (!member) return undefined;
+  if (!member) return null;
   return { userId: member.userId.toString(), role: member.role, status: member.status, joinedAt: member.joinedAt };
 }
 

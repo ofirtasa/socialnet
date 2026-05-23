@@ -97,3 +97,10 @@
 - [x] Home landing page: mobile hero section
 - [x] Login/Register: mobile-optimized forms
 - [x] Global CSS: mobile-first breakpoints, touch targets min 44px
+
+## Bug Fixes Round 2
+- [x] Bug 1: Cannot post in groups as member - added GroupCreatePost form in GroupDetail
+- [x] Bug 2: Group cover image URL not displaying - fixed with state-based error handling
+- [x] Bug 3: Chat messages not sending - fixed httpOnly cookie issue via getSessionToken tRPC endpoint
+- [x] Bug 4: Post media (image/video URL) not working - fixed postType logic and media URL input
+- [ ] Create new ZIP and deliver
