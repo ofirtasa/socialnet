@@ -19,10 +19,9 @@ Create `.env` in the project root:
 ```env
 MONGO_URI=mongodb+srv://USER:PASSWORD@CLUSTER.mongodb.net/?appName=socialnet
 JWT_SECRET=replace-with-any-long-secret
-PORT=3000
 ```
 
-Do not commit `.env`.
+Do not commit `.env`. The PORT will be auto-detected (starts at 3000, increments if busy).
 
 ### 3. Seed demo data
 
@@ -32,21 +31,42 @@ npx tsx seed-runner.ts
 
 This creates demo users, groups, posts, friendships, messages, likes, and comments.
 
-### 4. Run the app
+### 4. Run verification (TypeScript + Tests + Build)
+
+```bash
+npm run check    # Verify TypeScript has no errors
+npm run test     # Run 21 unit tests
+npm run build    # Create production build
+```
+
+All three should pass before proceeding.
+
+### 5. Start development server
+
+**Option A: Development mode (Hot reload)**
 
 ```bash
 npm run dev
 ```
 
-Open:
+Opens a Vite dev server with hot module reload. The app will automatically detect an available port (starting at 3000). Check console output for the actual URL. Example:
 
 ```text
 http://localhost:3000
 ```
 
-The `dev` script works on Windows, macOS, and Linux.
+(Or `3001`, `3002`, etc. if 3000 is busy.)
 
-### 5. Demo accounts
+**Option B: Production mode (After building)**
+
+```bash
+npm run build
+npm start
+```
+
+This serves the compiled app from `dist/` on port 3000 or the next available port.
+
+### 6. Demo accounts
 
 | Username | Password | Role |
 |---|---|---|
