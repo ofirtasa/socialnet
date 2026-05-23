@@ -43,7 +43,7 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Bug 3 Fix: Get session token via tRPC (httpOnly cookie not accessible from JS)
+  // Get session token via tRPC (httpOnly cookie is not accessible from JS)
   const { data: sessionToken } = trpc.auth.getSessionToken.useQuery(undefined, {
     enabled: !!user,
     staleTime: 60_000,

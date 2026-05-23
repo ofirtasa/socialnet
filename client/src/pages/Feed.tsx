@@ -12,7 +12,7 @@ import { formatDistanceToNow } from "date-fns";
 
 type PostType = "text" | "image" | "video" | "canvas";
 
-// ─── Bug 4 Fix: Media component with proper state-based error handling ────────
+// Media component with state-based error handling
 function PostMedia({ imageUrl, videoUrl }: { imageUrl?: string | null; videoUrl?: string | null }) {
   const [imgError, setImgError] = useState(false);
   const [vidError, setVidError] = useState(false);
@@ -140,7 +140,7 @@ function PostCard({ post, currentUserId, onRefresh }: { post: any; currentUserId
         <p className="text-sm leading-relaxed mb-3 whitespace-pre-wrap">{post.content}</p>
       )}
 
-      {/* Bug 4 Fix: Media renders correctly */}
+      {/* Render image/video media when available */}
       <PostMedia imageUrl={post.imageUrl} videoUrl={post.videoUrl} />
 
       {/* Actions */}
@@ -185,7 +185,7 @@ function CommentItem({ comment }: { comment: any }) {
   );
 }
 
-// ─── Bug 4 Fix: CreatePost with correct postType and media URL handling ────────
+// Create post with media-aware postType and URL handling
 function CreatePost({ userId, onSuccess }: { userId: string; onSuccess: () => void }) {
   const [content, setContent] = useState("");
   const [mediaType, setMediaType] = useState<"image" | "video">("image");

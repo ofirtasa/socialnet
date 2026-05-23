@@ -108,7 +108,7 @@ function GroupCreatePost({ userId, groupId, onSuccess }: { userId: string; group
   );
 }
 
-// ─── Cover Image with fallback (Bug 2 fix) ───────────────────────────────────
+// Cover image with fallback
 function GroupCover({ coverUrl, name }: { coverUrl?: string | null; name: string }) {
   const [imgFailed, setImgFailed] = useState(false);
 
@@ -173,7 +173,7 @@ export default function GroupDetail() {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto">
-        {/* Cover — Bug 2 fixed */}
+        {/* Group cover */}
         <div className="relative">
           <GroupCover coverUrl={group.coverUrl} name={group.name} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
@@ -210,7 +210,7 @@ export default function GroupDetail() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* Posts — Bug 1 fixed: show create post form for members */}
+            {/* Posts and create form for members/admins */}
             <div className="lg:col-span-2">
               {canPost && user && (
                 <GroupCreatePost userId={user.id} groupId={groupId} onSuccess={() => refetchPosts()} />
