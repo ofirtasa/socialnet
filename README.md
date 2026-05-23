@@ -1,143 +1,56 @@
-# SocialNet — Full-Stack Social Network Application
+# SocialNet - Full-Stack Social Network
 
-A full-featured social network built with **Node.js + Express + React + MongoDB Atlas**, developed as a final project for the Android 2 course.
+SocialNet is a final-project social network built with Node.js, Express, React, MongoDB Atlas, Socket.io, D3.js, Canvas, CSS3, and jQuery AJAX.
 
----
+## Quick Start For The Examiner
 
-## Features
-
-- **Authentication** — Username/password registration and login with bcrypt hashing and session tokens
-- **User Feed** — Posts from your friends and joined groups
-- **Posts** — Create, edit, delete text/image/video posts; like and comment
-- **Groups** — Public and private groups with admin roles, join requests, member management
-- **Friends** — Send, accept, reject friend requests; view friends list
-- **Real-Time Chat** — WebSocket-based direct messaging using Socket.io
-- **Statistics Dashboard** — D3.js charts showing platform activity (live MongoDB data)
-- **Canvas Avatar Editor** — Draw and customize your profile picture using HTML5 Canvas
-- **Dark / Light Mode** — Persistent theme toggle
-- **Advanced Search** — Multi-parameter search for posts (keyword, type, date, group) and users (name, role, date)
-- **Admin Panel** — Full CRUD management for users, posts, and groups; seed data button
-- **MVC Architecture** — Clear separation: Mongoose models → DB helpers → tRPC routers → React pages
-
----
-
-## Technology Stack
-
-| Layer | Technology |
-|---|---|
-| Backend | Node.js, Express, tRPC |
-| Frontend | React 19, Tailwind CSS 4, Vite |
-| Database | MongoDB Atlas (Mongoose ODM) |
-| Real-Time | Socket.io (WebSocket transport) |
-| Charts | D3.js |
-| Auth | bcryptjs, nanoid session tokens |
-| Testing | Vitest |
-
----
-
-## Project Structure (MVC)
-
-```
-socialnet/
-├── server/
-│   ├── mongodb.ts          ← Mongoose models (User, Post, Comment, Like, Group, Message, Friendship, Session)
-│   ├── db.ts               ← Database query helpers (Model layer)
-│   ├── routers.ts          ← tRPC procedures / API routes (Controller layer)
-│   ├── seed.ts             ← Demo data seeder
-│   └── _core/              ← Framework: auth, context, Socket.io, OAuth
-├── client/src/
-│   ├── pages/              ← React page components (View layer)
-│   │   ├── Feed.tsx        ← Main feed with post CRUD
-│   │   ├── Chat.tsx        ← Real-time Socket.io chat
-│   │   ├── Groups.tsx      ← Group browsing and creation
-│   │   ├── GroupDetail.tsx ← Group management (admin roles)
-│   │   ├── Friends.tsx     ← Friend requests and list
-│   │   ├── Profile.tsx     ← User profile + canvas avatar editor
-│   │   ├── Stats.tsx       ← D3.js statistics dashboard
-│   │   ├── Search.tsx      ← Advanced multi-param search
-│   │   └── AdminPanel.tsx  ← Admin CRUD + seed trigger
-│   ├── components/
-│   │   └── Layout.tsx      ← Sidebar navigation + dark mode toggle
-│   └── contexts/
-│       ├── AuthContext.tsx  ← Local session state
-│       └── ThemeContext.tsx ← Dark/light mode with localStorage
-├── drizzle/schema.ts       ← (Legacy MySQL schema — kept for reference)
-├── .env.example            ← Environment variable template
-└── README.md
-```
-
----
-
-## MongoDB Collections
-
-| Collection | Description |
-|---|---|
-| `users` | User accounts with hashed passwords, roles, avatars |
-| `posts` | Posts with content, media URLs, like/comment counts |
-| `comments` | Comments linked to posts |
-| `likes` | Post likes (unique per user/post) |
-| `groups` | Groups with embedded member list and roles |
-| `messages` | Direct messages between users |
-| `friendships` | Friend requests and relationships |
-| `sessions` | Auth session tokens (auto-expire via TTL index) |
-
----
-
-## Setup Instructions
-
-### Prerequisites
-
-- Node.js 18+ and pnpm (`npm install -g pnpm`)
-- MongoDB Atlas account (free tier works)
-
-### 1. Clone and Install
+### 1. Install dependencies
 
 ```bash
-git clone <your-repo-url>
-cd socialnet
-pnpm install
+npm install
 ```
 
-### 2. Configure Environment Variables
+The repository includes `.npmrc` with `legacy-peer-deps=true` because one Vite helper package has an older peer dependency range. This lets a clean examiner machine install with the plain `npm install` command.
 
-Copy the example file and fill in your values:
+### 2. Configure environment variables
 
-```bash
-cp .env.example .env
+Create `.env` in the project root:
+
+```env
+MONGO_URI=mongodb+srv://USER:PASSWORD@CLUSTER.mongodb.net/?appName=socialnet
+JWT_SECRET=replace-with-any-long-secret
+PORT=3000
 ```
 
-Edit `.env`:
+Do not commit `.env`.
 
-```
-MONGO_URI=mongodb+srv://your_user:your_password@your-cluster.mongodb.net/?appName=your-app-name
-```
-
-> **Important:** Never commit `.env` to Git. It is already in `.gitignore`.
-
-### 3. Seed Demo Data
-
-Run the seed script to populate MongoDB with 11 demo users, 5 groups, 25 posts, friendships, and messages:
+### 3. Seed demo data
 
 ```bash
 npx tsx seed-runner.ts
 ```
 
-### 4. Start the Development Server
+This creates demo users, groups, posts, friendships, messages, likes, and comments.
+
+### 4. Run the app
 
 ```bash
-pnpm dev
+npm run dev
 ```
 
-The app will be available at `http://localhost:3000`.
+Open:
 
----
+```text
+http://localhost:3000
+```
 
-## Demo Accounts
+The `dev` script works on Windows, macOS, and Linux.
 
-After seeding, you can log in with any of these accounts:
+### 5. Demo accounts
 
 | Username | Password | Role |
 |---|---|---|
+| admin | admin123 | System admin |
 | alice | password123 | User |
 | bob | password123 | User |
 | carol | password123 | User |
@@ -148,48 +61,84 @@ After seeding, you can log in with any of these accounts:
 | henry | password123 | User |
 | iris | password123 | User |
 | jack | password123 | User |
-| admin | admin123 | Admin |
 
----
-
-## MongoDB Configuration
-
-The app connects to MongoDB Atlas using the `MONGO_URI` environment variable. The connection is established lazily on first request via `connectMongoDB()` in `server/mongodb.ts`.
-
-**Database name:** `android2-project-cluster`
-
-All Mongoose models are defined in `server/mongodb.ts`. The `db.ts` file provides clean helper functions that abstract Mongoose queries, keeping the routers (controllers) free of database logic.
-
----
-
-## Running Tests
+## Verification Commands
 
 ```bash
-pnpm test
+npm run check
+npm test
+npm run build
 ```
 
-21 tests covering auth, users, posts, groups, stats, and friends.
+Expected result:
 
----
+- TypeScript passes.
+- Vitest passes 21 tests.
+- Production build is created in `dist/`.
 
-## CSS3 Features Used
+## Technical Requirements Mapping
 
-| Feature | Where Used |
-|---|---|
-| `@font-face` | SocialNetDisplay font in `index.css` |
-| `text-shadow` | All `h1`, `h2` headings |
-| `transition` | Buttons, cards, nav items, avatars |
-| `border-radius` | Cards, buttons, avatars, inputs |
-| `column-count` (multiple-columns) | Feature cards on landing page |
+| # | Requirement | Where to verify |
+|---|---|---|
+| 15 | Node.js + Express server, React client | `server/_core/index.ts`, `client/src/main.tsx`, `package.json` |
+| 16 | MongoDB storage/retrieval | `server/mongodb.ts`, `server/db.ts`, `.env` `MONGO_URI` |
+| 17 | MVC separation | Models: `server/mongodb.ts`; DB/model helpers: `server/db.ts`; Controllers/API: `server/routers.ts` and `server/_core/jqueryRoutes.ts`; Views: `client/src/pages/*` |
+| 18 | At least 3 models | User, Post, Group, Comment, Like, Message, Friendship, Session in `server/mongodb.ts` |
+| 19 | CRUD/List/Search on models via UI | Posts: Feed/Profile/Admin; Users: Profile/Admin/Search; Groups: Groups/Group Detail/Admin/Search |
+| 20 | 2+ multi-parameter searches | `/search` supports Posts search by keyword/type/group/date range and Users search by name/role/join dates |
+| 21 | Group management and permissions | `/groups`, `/groups/:id`; server-side guards in `server/routers.ts` restrict private data, group admin actions, post ownership, friendships, and messages |
+| 22 | Personal posts and feed | `/profile/:id` shows user's posts; `/feed` shows own, friends', and joined-groups posts |
+| 23 | Demo social-network data | `server/seed.ts`, `seed-runner.ts`, Admin Panel seed button |
+| 24 | Error handling and validation | Zod validation in `server/routers.ts`; client required fields, disabled buttons, toast errors |
+| 25 | jQuery and AJAX | jQuery CDN in `client/index.html`; REST AJAX routes in `server/_core/jqueryRoutes.ts`; AJAX panel/search in `/search` |
+| 26 | React with Video and Canvas | Video posts in `Feed.tsx`, `GroupDetail.tsx`, `Profile.tsx`; Canvas avatar editor in `Profile.tsx` |
+| 27 | CSS3 | `client/src/index.css`: `@font-face`, `text-shadow`, `transition`, `column-count`, `border-radius` |
+| 28 | Socket.io / WebSockets chat | `server/_core/index.ts`, `client/src/pages/Chat.tsx`, `/chat` |
+| 29 | D3.js dynamic charts | `/stats`, `client/src/pages/Stats.tsx`, stats router reads MongoDB live data |
 
----
+## Suggested Examiner Demo Flow
 
-## Real-Time Chat
+1. Log in as `admin / admin123`.
+2. Open `/admin`: show CRUD controls and seed button.
+3. Open `/feed`: create a text/image/video post, edit it, delete it, like/comment.
+4. Open `/groups`: create a public/private group.
+5. Open a group as manager: update group details, approve requests, manage members, publish group post.
+6. Open `/search`: run Posts search with at least 3 filters; click `AJAX Search` to demonstrate jQuery Ajax.
+7. Switch to Users search and filter by name/role/date.
+8. Open `/profile/:id`: show personal posts and Canvas avatar editor.
+9. Open `/chat`: send real-time messages through Socket.io.
+10. Open `/stats`: show D3 charts based on MongoDB data.
 
-Chat is implemented using **Socket.io** with WebSocket-only transport (no polling fallback). Authentication is done by sending the `sn_session` cookie token after connection. Messages are persisted to MongoDB and loaded from DB on conversation open.
+## Project Structure
 
----
+```text
+socialnet/
+  server/
+    mongodb.ts            Mongoose models
+    db.ts                 Database/model helper functions
+    routers.ts            tRPC API controllers
+    seed.ts               Demo data seeding
+    _core/
+      index.ts            Express server + Socket.io
+      jqueryRoutes.ts     REST endpoints for jQuery AJAX
+  client/src/
+    pages/                React views
+    components/           Shared UI components
+    contexts/             Auth and theme context
+  shared/                 Shared constants/types
+```
 
-## License
+## Production Build
 
-Built for educational purposes — Android 2 Course Final Project.
+```bash
+npm run build
+npm start
+```
+
+`npm start` serves the compiled app from `dist/`.
+
+## Notes
+
+- MongoDB Atlas must be reachable from the machine running the app.
+- `.env` is intentionally ignored by Git.
+- The application uses React/tRPC for the main app flow and includes dedicated jQuery AJAX routes and UI to satisfy the jQuery/AJAX technical requirement.

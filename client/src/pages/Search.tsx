@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import Layout from "@/components/Layout";
 import { Search as SearchIcon, Users, FileText } from "lucide-react";
@@ -7,12 +7,23 @@ import { formatDistanceToNow } from "date-fns";
 
 type SearchTab = "posts" | "users";
 
+type AjaxSummary = {
+  users: number;
+  posts: number;
+  groups: number;
+  messages: number;
+};
+
 export default function Search() {
   const [tab, setTab] = useState<SearchTab>("posts");
   const [postParams, setPostParams] = useState({ keyword: "", groupId: "", postType: "", dateFrom: "", dateTo: "" });
   const [postSearchActive, setPostSearchActive] = useState(false);
   const [userParams, setUserParams] = useState({ name: "", role: "", joinedAfter: "", joinedBefore: "" });
   const [userSearchActive, setUserSearchActive] = useState(false);
+  const [ajaxSummary, setAjaxSummary] = useState<AjaxSummary | null>(null);
+  const [ajaxStatus, setAjaxStatus] = useState("Loading AJAX data...");
+  const [ajaxPostResults, setAjaxPostResults] = useState<any[] | null>(null);
+  const [ajaxLoading, setAjaxLoading] = useState(false);
 
   const { data: postResults, isLoading: postsLoading } = trpc.posts.search.useQuery(
     {
@@ -38,12 +49,83 @@ export default function Search() {
   const handlePostSearch = (e: React.FormEvent) => { e.preventDefault(); setPostSearchActive(true); };
   const handleUserSearch = (e: React.FormEvent) => { e.preventDefault(); setUserSearchActive(true); };
 
+  const getJquery = () => (window as any).jQuery as any | undefined;
+
+  useEffect(() => {
+    const $ = getJquery();
+    if (!$) {
+      setAjaxStatus("jQuery did not load");
+      return;
+    }
+
+    $("#ajaxSnapshot").hide().fadeIn(220);
+    $.ajax({
+      url: "/api/jquery/summary",
+      method: "GET",
+      dataType: "json",
+    })
+      .done((response: { totals?: AjaxSummary }) => {
+        setAjaxSummary(response.totals || null);
+        setAjaxStatus("AJAX summary loaded from Express");
+      })
+      .fail(() => setAjaxStatus("AJAX summary failed"));
+  }, []);
+
+  const runJqueryPostSearch = () => {
+    const $ = getJquery();
+    if (!$) {
+      setAjaxStatus("jQuery did not load");
+      return;
+    }
+
+    setAjaxLoading(true);
+    $("#ajaxSnapshot").addClass("ring-2 ring-primary/30");
+    $.ajax({
+      url: "/api/jquery/search/posts",
+      method: "GET",
+      dataType: "json",
+      data: {
+        keyword: postParams.keyword,
+        groupId: postParams.groupId,
+        postType: postParams.postType,
+        dateFrom: postParams.dateFrom,
+        dateTo: postParams.dateTo,
+      },
+    })
+      .done((response: { results?: any[] }) => {
+        setAjaxPostResults(response.results || []);
+        setAjaxStatus("Post search completed with jQuery AJAX");
+      })
+      .fail(() => setAjaxStatus("Post AJAX search failed"))
+      .always(() => {
+        setAjaxLoading(false);
+        setTimeout(() => $("#ajaxSnapshot").removeClass("ring-2 ring-primary/30"), 450);
+      });
+  };
+
   return (
     <Layout>
       <div className="max-w-3xl mx-auto px-4 py-6 lg:py-8">
         <h1 className="text-xl sm:text-2xl font-bold mb-5" style={{ fontFamily: "'SocialNetDisplay', 'Playfair Display', serif" }}>
           Advanced Search
         </h1>
+
+        <div id="ajaxSnapshot" className="sn-card p-4 mb-5 transition-all">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">AJAX Snapshot</h2>
+              <p className="text-xs text-muted-foreground">{ajaxStatus}</p>
+            </div>
+            {ajaxSummary && (
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                <div><strong className="block text-sm">{ajaxSummary.users}</strong><span className="text-muted-foreground">Users</span></div>
+                <div><strong className="block text-sm">{ajaxSummary.posts}</strong><span className="text-muted-foreground">Posts</span></div>
+                <div><strong className="block text-sm">{ajaxSummary.groups}</strong><span className="text-muted-foreground">Groups</span></div>
+                <div><strong className="block text-sm">{ajaxSummary.messages}</strong><span className="text-muted-foreground">Messages</span></div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Tabs */}
         <div className="flex gap-2 mb-5 p-1 bg-secondary rounded-xl w-fit">
@@ -101,6 +183,9 @@ export default function Search() {
                   <button type="submit" className="sn-btn sn-btn-primary text-sm flex items-center gap-2 flex-1 sm:flex-none justify-center">
                     <SearchIcon size={15} /> Search Posts
                   </button>
+                  <button type="button" onClick={runJqueryPostSearch} disabled={ajaxLoading} className="text-sm px-4 py-2 rounded-xl border border-border hover:bg-secondary transition-colors">
+                    {ajaxLoading ? "AJAX..." : "AJAX Search"}
+                  </button>
                   <button type="button" onClick={() => { setPostParams({ keyword: "", groupId: "", postType: "", dateFrom: "", dateTo: "" }); setPostSearchActive(false); }} className="text-sm px-4 py-2 rounded-xl border border-border hover:bg-secondary transition-colors">
                     Clear
                   </button>
@@ -109,6 +194,22 @@ export default function Search() {
             </div>
 
             {postsLoading && <div className="text-center py-8 text-muted-foreground">Searching...</div>}
+            {ajaxPostResults && (
+              <div className="mb-5">
+                <p className="text-sm text-muted-foreground mb-3">{ajaxPostResults.length} AJAX result{ajaxPostResults.length !== 1 ? "s" : ""} found</p>
+                <div className="space-y-3">
+                  {ajaxPostResults.slice(0, 5).map((post: any) => (
+                    <div key={`ajax-${post.id}`} className="sn-card p-4 border-primary/30 fade-in">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{post.postType}</span>
+                        <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })}</span>
+                      </div>
+                      <p className="text-sm leading-relaxed line-clamp-2">{post.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {postResults && (
               <div>
                 <p className="text-sm text-muted-foreground mb-3">{postResults.length} result{postResults.length !== 1 ? "s" : ""} found</p>

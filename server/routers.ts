@@ -5,7 +5,7 @@ import { z } from "zod";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
   addComment,
   approveGroupMember,
@@ -25,6 +25,7 @@ import {
   getConversationList,
   getFeedPosts,
   getFriendship,
+  getFriendshipById,
   getFriends,
   getGroupById,
   getGroupMembers,
@@ -69,6 +70,46 @@ import { connectMongoDB } from "./mongodb";
 
 // Ensure MongoDB is connected on startup
 connectMongoDB().catch(console.error);
+
+function assertSelfOrAdmin(ctx: { user: { id: string; role: "user" | "admin" } | null }, userId: string) {
+  if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+  if (ctx.user.role !== "admin" && ctx.user.id !== userId) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You can only access your own private data" });
+  }
+}
+
+async function assertGroupAdmin(ctx: { user: { id: string; role: "user" | "admin" } | null }, groupId: string) {
+  if (!ctx.user) throw new TRPCError({ code: "UNAUTHORIZED" });
+  const group = await getGroupById(groupId);
+  if (!group) throw new TRPCError({ code: "NOT_FOUND" });
+  const membership = await getGroupMembership(groupId, ctx.user.id);
+  const canManage =
+    ctx.user.role === "admin" ||
+    group.managerId === ctx.user.id ||
+    (membership?.status === "approved" && membership.role === "admin");
+  if (!canManage) throw new TRPCError({ code: "FORBIDDEN", message: "Group admin permissions required" });
+  return group;
+}
+
+async function canViewGroupPosts(ctx: { user: { id: string; role: "user" | "admin" } | null }, groupId: string) {
+  const group = await getGroupById(groupId);
+  if (!group) return false;
+  if (!group.isPrivate) return true;
+  if (!ctx.user) return false;
+  if (ctx.user.role === "admin" || group.managerId === ctx.user.id) return true;
+  const membership = await getGroupMembership(groupId, ctx.user.id);
+  return membership?.status === "approved";
+}
+
+async function filterVisiblePosts(ctx: { user: { id: string; role: "user" | "admin" } | null }, posts: any[]) {
+  const visible = [];
+  for (const post of posts) {
+    if (!post.groupId || await canViewGroupPosts(ctx, post.groupId)) {
+      visible.push(post);
+    }
+  }
+  return visible;
+}
 
 // ─── Auth Router ──────────────────────────────────────────────────────────────
 const authRouter = router({
@@ -208,7 +249,7 @@ const usersRouter = router({
       })
     ),
 
-  update: publicProcedure
+  update: protectedProcedure
     .input(
       z.object({
         id: z.string(),
@@ -218,13 +259,14 @@ const usersRouter = router({
         email: z.string().email().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
+      assertSelfOrAdmin(ctx, id);
       await updateUser(id, data);
       return { success: true };
     }),
 
-  delete: publicProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
       await deleteUser(input.id);
@@ -234,7 +276,7 @@ const usersRouter = router({
 
 // ─── Posts Router ─────────────────────────────────────────────────────────────
 const postsRouter = router({
-  create: publicProcedure
+  create: protectedProcedure
     .input(
       z.object({
         authorId: z.string(),
@@ -245,20 +287,36 @@ const postsRouter = router({
         postType: z.enum(["text", "image", "video", "canvas"]).default("text"),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      if (input.authorId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You can only create posts as yourself" });
+      }
+      if (input.groupId) {
+        const group = await getGroupById(input.groupId);
+        if (!group) throw new TRPCError({ code: "NOT_FOUND" });
+        const membership = await getGroupMembership(input.groupId, ctx.user.id);
+        const canPost =
+          ctx.user.role === "admin" ||
+          group.managerId === ctx.user.id ||
+          membership?.status === "approved";
+        if (!canPost) throw new TRPCError({ code: "FORBIDDEN", message: "Only approved group members can post" });
+      }
       const post = await createPost(input);
       return { success: true, post };
     }),
 
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const post = await getPostById(input.id);
       if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+      if (post.groupId && !(await canViewGroupPosts(ctx, post.groupId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Private group post" });
+      }
       return post;
     }),
 
-  update: publicProcedure
+  update: protectedProcedure
     .input(
       z.object({
         id: z.string(),
@@ -268,30 +326,48 @@ const postsRouter = router({
         postType: z.enum(["text", "image", "video", "canvas"]).optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
+      const post = await getPostById(id);
+      if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role !== "admin" && post.authorId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You can only edit your own posts" });
+      }
       await updatePost(id, data);
       return { success: true };
     }),
 
-  delete: publicProcedure
+  delete: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const post = await getPostById(input.id);
+      if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role !== "admin" && post.authorId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You can only delete your own posts" });
+      }
       await deletePost(input.id);
       return { success: true };
     }),
 
   byAuthor: publicProcedure
     .input(z.object({ authorId: z.string() }))
-    .query(({ input }) => getPostsByAuthor(input.authorId)),
+    .query(async ({ input, ctx }) => filterVisiblePosts(ctx, await getPostsByAuthor(input.authorId))),
 
   byGroup: publicProcedure
     .input(z.object({ groupId: z.string() }))
-    .query(({ input }) => getPostsByGroup(input.groupId)),
+    .query(async ({ input, ctx }) => {
+      if (!(await canViewGroupPosts(ctx, input.groupId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Private group posts are visible to members only" });
+      }
+      return getPostsByGroup(input.groupId);
+    }),
 
-  feed: publicProcedure
+  feed: protectedProcedure
     .input(z.object({ userId: z.string() }))
-    .query(({ input }) => getFeedPosts(input.userId)),
+    .query(({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
+      return getFeedPosts(input.userId);
+    }),
 
   search: publicProcedure
     .input(
@@ -304,53 +380,69 @@ const postsRouter = router({
         dateTo: z.string().optional(),
       })
     )
-    .query(({ input }) =>
-      searchPosts({
+    .query(async ({ input, ctx }) =>
+      filterVisiblePosts(ctx, await searchPosts({
         keyword: input.keyword,
         groupId: input.groupId,
         authorId: input.authorId,
         postType: input.postType,
         dateFrom: input.dateFrom ? new Date(input.dateFrom) : undefined,
         dateTo: input.dateTo ? new Date(input.dateTo) : undefined,
-      })
+      }))
     ),
 
-  all: publicProcedure.query(() => getAllPosts()),
+  all: publicProcedure.query(async ({ ctx }) => filterVisiblePosts(ctx, await getAllPosts())),
 
-  like: publicProcedure
+  like: protectedProcedure
     .input(z.object({ postId: z.string(), userId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
       await likePost(input.postId, input.userId);
       return { success: true };
     }),
 
-  unlike: publicProcedure
+  unlike: protectedProcedure
     .input(z.object({ postId: z.string(), userId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
       await unlikePost(input.postId, input.userId);
       return { success: true };
     }),
 
-  userLikes: publicProcedure
+  userLikes: protectedProcedure
     .input(z.object({ userId: z.string() }))
-    .query(({ input }) => getUserLikes(input.userId)),
+    .query(({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
+      return getUserLikes(input.userId);
+    }),
 
-  isLiked: publicProcedure
+  isLiked: protectedProcedure
     .input(z.object({ postId: z.string(), userId: z.string() }))
-    .query(({ input }) => isPostLikedByUser(input.postId, input.userId)),
+    .query(({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
+      return isPostLikedByUser(input.postId, input.userId);
+    }),
 
-  addComment: publicProcedure
+  addComment: protectedProcedure
     .input(z.object({ postId: z.string(), authorId: z.string(), content: z.string().min(1).max(2000) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.authorId);
       const comment = await addComment(input.postId, input.authorId, input.content);
       return { success: true, comment };
     }),
 
   getComments: publicProcedure
     .input(z.object({ postId: z.string() }))
-    .query(({ input }) => getCommentsByPost(input.postId)),
+    .query(async ({ input, ctx }) => {
+      const post = await getPostById(input.postId);
+      if (!post) throw new TRPCError({ code: "NOT_FOUND" });
+      if (post.groupId && !(await canViewGroupPosts(ctx, post.groupId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Private group comments are visible to members only" });
+      }
+      return getCommentsByPost(input.postId);
+    }),
 
-  deleteComment: publicProcedure
+  deleteComment: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
       await deleteComment(input.id);
@@ -360,7 +452,7 @@ const postsRouter = router({
 
 // ─── Groups Router ────────────────────────────────────────────────────────────
 const groupsRouter = router({
-  create: publicProcedure
+  create: protectedProcedure
     .input(
       z.object({
         name: z.string().min(1).max(128),
@@ -370,7 +462,10 @@ const groupsRouter = router({
         coverUrl: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      if (input.managerId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You can only create groups as yourself" });
+      }
       const id = await createGroup(input);
       return { success: true, id };
     }),
@@ -396,7 +491,7 @@ const groupsRouter = router({
     )
     .query(({ input }) => searchGroups(input)),
 
-  update: publicProcedure
+  update: protectedProcedure
     .input(
       z.object({
         id: z.string(),
@@ -406,75 +501,97 @@ const groupsRouter = router({
         coverUrl: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const { id, ...data } = input;
+      await assertGroupAdmin(ctx, id);
       await updateGroup(id, data);
       return { success: true };
     }),
 
-  delete: publicProcedure
+  delete: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      await assertGroupAdmin(ctx, input.id);
       await deleteGroup(input.id);
       return { success: true };
     }),
 
-  userGroups: publicProcedure
+  userGroups: protectedProcedure
     .input(z.object({ userId: z.string() }))
-    .query(({ input }) => getUserGroups(input.userId)),
+    .query(({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
+      return getUserGroups(input.userId);
+    }),
 
-  members: publicProcedure
+  members: protectedProcedure
     .input(z.object({ groupId: z.string() }))
-    .query(({ input }) => getGroupMembers(input.groupId)),
+    .query(async ({ input, ctx }) => {
+      if (!(await canViewGroupPosts(ctx, input.groupId))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Private group members are visible to members only" });
+      }
+      return getGroupMembers(input.groupId);
+    }),
 
-  membership: publicProcedure
+  membership: protectedProcedure
     .input(z.object({ groupId: z.string(), userId: z.string() }))
-    .query(({ input }) => getGroupMembership(input.groupId, input.userId)),
+    .query(({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
+      return getGroupMembership(input.groupId, input.userId);
+    }),
 
-  join: publicProcedure
+  join: protectedProcedure
     .input(z.object({ groupId: z.string(), userId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
       const group = await getGroupById(input.groupId);
       if (!group) throw new TRPCError({ code: "NOT_FOUND" });
       await joinGroup(input.groupId, input.userId, group.isPrivate);
       return { success: true, pending: group.isPrivate };
     }),
 
-  leave: publicProcedure
+  leave: protectedProcedure
     .input(z.object({ groupId: z.string(), userId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
       await leaveGroup(input.groupId, input.userId);
       return { success: true };
     }),
 
-  pendingRequests: publicProcedure
+  pendingRequests: protectedProcedure
     .input(z.object({ groupId: z.string() }))
-    .query(({ input }) => getPendingGroupRequests(input.groupId)),
+    .query(async ({ input, ctx }) => {
+      await assertGroupAdmin(ctx, input.groupId);
+      return getPendingGroupRequests(input.groupId);
+    }),
 
-  approve: publicProcedure
+  approve: protectedProcedure
     .input(z.object({ groupId: z.string(), userId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      await assertGroupAdmin(ctx, input.groupId);
       await approveGroupMember(input.groupId, input.userId);
       return { success: true };
     }),
 
-  reject: publicProcedure
+  reject: protectedProcedure
     .input(z.object({ groupId: z.string(), userId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      await assertGroupAdmin(ctx, input.groupId);
       await rejectGroupMember(input.groupId, input.userId);
       return { success: true };
     }),
 
-  removeMember: publicProcedure
+  removeMember: protectedProcedure
     .input(z.object({ groupId: z.string(), userId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      await assertGroupAdmin(ctx, input.groupId);
       await removeGroupMember(input.groupId, input.userId);
       return { success: true };
     }),
 
-  setMemberRole: publicProcedure
+  setMemberRole: protectedProcedure
     .input(z.object({ groupId: z.string(), userId: z.string(), role: z.enum(["admin", "member"]) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      await assertGroupAdmin(ctx, input.groupId);
       await setGroupMemberRole(input.groupId, input.userId, input.role);
       return { success: true };
     }),
@@ -482,64 +599,100 @@ const groupsRouter = router({
 
 // ─── Friends Router ───────────────────────────────────────────────────────────
 const friendsRouter = router({
-  send: publicProcedure
+  send: protectedProcedure
     .input(z.object({ requesterId: z.string(), addresseeId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.requesterId);
       await sendFriendRequest(input.requesterId, input.addresseeId);
       return { success: true };
     }),
 
-  getFriendship: publicProcedure
+  getFriendship: protectedProcedure
     .input(z.object({ userId1: z.string(), userId2: z.string() }))
-    .query(({ input }) => getFriendship(input.userId1, input.userId2)),
+    .query(({ input, ctx }) => {
+      if (ctx.user.role !== "admin" && ctx.user.id !== input.userId1 && ctx.user.id !== input.userId2) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You can only view your own friendship status" });
+      }
+      return getFriendship(input.userId1, input.userId2);
+    }),
 
-  accept: publicProcedure
+  accept: protectedProcedure
     .input(z.object({ friendshipId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const friendship = await getFriendshipById(input.friendshipId);
+      if (!friendship) throw new TRPCError({ code: "NOT_FOUND" });
+      if (ctx.user.role !== "admin" && friendship.addresseeId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only the request recipient can accept it" });
+      }
       await updateFriendship(input.friendshipId, "accepted");
       return { success: true };
     }),
 
-  reject: publicProcedure
+  reject: protectedProcedure
     .input(z.object({ friendshipId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      const friendship = await getFriendshipById(input.friendshipId);
+      if (!friendship) throw new TRPCError({ code: "NOT_FOUND" });
+      const isParticipant = friendship.requesterId === ctx.user.id || friendship.addresseeId === ctx.user.id;
+      if (ctx.user.role !== "admin" && !isParticipant) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only friendship participants can reject it" });
+      }
       await updateFriendship(input.friendshipId, "rejected");
       return { success: true };
     }),
 
-  list: publicProcedure
+  list: protectedProcedure
     .input(z.object({ userId: z.string() }))
-    .query(({ input }) => getFriends(input.userId)),
+    .query(({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
+      return getFriends(input.userId);
+    }),
 
-  pending: publicProcedure
+  pending: protectedProcedure
     .input(z.object({ userId: z.string() }))
-    .query(({ input }) => getPendingFriendRequests(input.userId)),
+    .query(({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
+      return getPendingFriendRequests(input.userId);
+    }),
 
-  sent: publicProcedure
+  sent: protectedProcedure
     .input(z.object({ userId: z.string() }))
-    .query(({ input }) => getSentFriendRequests(input.userId)),
+    .query(({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
+      return getSentFriendRequests(input.userId);
+    }),
 });
 
 // ─── Messages Router ──────────────────────────────────────────────────────────
 const messagesRouter = router({
-  send: publicProcedure
+  send: protectedProcedure
     .input(z.object({ senderId: z.string(), receiverId: z.string(), content: z.string().min(1).max(5000) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.senderId);
       await sendMessage(input);
       return { success: true };
     }),
 
-  conversation: publicProcedure
+  conversation: protectedProcedure
     .input(z.object({ userId1: z.string(), userId2: z.string() }))
-    .query(({ input }) => getConversation(input.userId1, input.userId2)),
+    .query(({ input, ctx }) => {
+      if (ctx.user.id !== input.userId1 && ctx.user.id !== input.userId2 && ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You can only view your own conversations" });
+      }
+      return getConversation(input.userId1, input.userId2);
+    }),
 
-  conversationList: publicProcedure
+  conversationList: protectedProcedure
     .input(z.object({ userId: z.string() }))
-    .query(({ input }) => getConversationList(input.userId)),
+    .query(({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.userId);
+      return getConversationList(input.userId);
+    }),
 
-  markRead: publicProcedure
+  markRead: protectedProcedure
     .input(z.object({ senderId: z.string(), receiverId: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
+      assertSelfOrAdmin(ctx, input.receiverId);
       await markMessagesRead(input.senderId, input.receiverId);
       return { success: true };
     }),
@@ -555,7 +708,7 @@ const statsRouter = router({
 
 // ─── Seed Router ──────────────────────────────────────────────────────────────
 const seedRouter = router({
-  run: publicProcedure.mutation(async () => {
+  run: adminProcedure.mutation(async () => {
     const { runSeed } = await import("./seed");
     await runSeed();
     return { success: true };

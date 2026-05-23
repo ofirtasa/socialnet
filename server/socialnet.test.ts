@@ -174,14 +174,16 @@ describe("stats", () => {
 // ─── Friends Tests ────────────────────────────────────────────────────────────
 describe("friends", () => {
   it("list returns array", async () => {
-    const caller = appRouter.createCaller(createPublicCtx());
-    const result = await caller.friends.list({ userId: "000000000000000000000000" });
+    const userId = "000000000000000000000000";
+    const caller = appRouter.createCaller(createUserCtx(userId));
+    const result = await caller.friends.list({ userId });
     expect(Array.isArray(result)).toBe(true);
   });
 
   it("pending returns array", async () => {
-    const caller = appRouter.createCaller(createPublicCtx());
-    const result = await caller.friends.pending({ userId: "000000000000000000000000" });
+    const userId = "000000000000000000000000";
+    const caller = appRouter.createCaller(createUserCtx(userId));
+    const result = await caller.friends.pending({ userId });
     expect(Array.isArray(result)).toBe(true);
   });
 });

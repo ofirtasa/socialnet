@@ -544,6 +544,16 @@ export async function getFriendship(userId1: string, userId2: string) {
   return safeFriendship(f);
 }
 
+export async function getFriendshipById(id: string) {
+  await db();
+  try {
+    const f = await FriendshipModel.findById(id);
+    return safeFriendship(f);
+  } catch {
+    return undefined;
+  }
+}
+
 export async function updateFriendship(id: string, status: "accepted" | "rejected") {
   await db();
   await FriendshipModel.findByIdAndUpdate(id, { $set: { status } });
