@@ -8,7 +8,7 @@ import { Link } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 
 export default function AdminPanel() {
-  const { user } = useLocalAuth();
+  const { user, loading } = useLocalAuth();
   const [activeTab, setActiveTab] = useState<"users" | "posts" | "groups" | "seed">("users");
   const [seeding, setSeeding] = useState(false);
 
@@ -23,6 +23,14 @@ export default function AdminPanel() {
     onSuccess: () => { toast.success("Demo data seeded!"); setSeeding(false); refetchUsers(); refetchPosts(); refetchGroups(); },
     onError: (e) => { toast.error(e.message); setSeeding(false); },
   });
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64 text-muted-foreground">Checking session...</div>
+      </Layout>
+    );
+  }
 
   if (!user || user.role !== "admin") {
     return (
@@ -152,7 +160,7 @@ export default function AdminPanel() {
                 <div className="text-4xl sm:text-5xl mb-3">🌱</div>
                 <h2 className="text-lg sm:text-xl font-bold mb-2" style={{ fontFamily: "'SocialNetDisplay', 'Playfair Display', serif" }}>Seed Demo Data</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Populate MongoDB with 11 users, 5 groups, 25 posts, friendships, and messages. This will clear existing demo data.
+                  Populate MongoDB with 11 users, 5 groups, 25 posts, friendships, and messages. Existing data is preserved by default.
                 </p>
               </div>
               <div className="bg-secondary/50 rounded-xl p-4 mb-5 text-sm space-y-1.5">

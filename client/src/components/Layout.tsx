@@ -41,7 +41,7 @@ function ThemeToggle({ compact = false }: { compact?: boolean }) {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, refetch } = useLocalAuth();
+  const { user, loading, refetch } = useLocalAuth();
   const [location] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -149,7 +149,9 @@ export default function Layout({ children }: LayoutProps) {
       {/* User Profile + Theme */}
       <div className="p-3 border-t border-border">
         <ThemeToggle />
-        {user ? (
+        {loading ? (
+          <div className="px-3 py-2.5 text-xs text-muted-foreground">Checking session...</div>
+        ) : user ? (
           <div className="space-y-1">
             <Link href={`/profile/${user.id}`}>
               <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-secondary cursor-pointer transition-all duration-200">

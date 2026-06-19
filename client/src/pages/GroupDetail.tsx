@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useLocalAuth } from "@/contexts/AuthContext";
 import Layout from "@/components/Layout";
+import VideoMedia from "../components/VideoMedia";
 import { toast } from "sonner";
 import { Users, Lock, Globe, Check, X, Settings, Shield, UserMinus, Crown, ChevronDown, ChevronUp, Image, Video, Send } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -71,7 +72,7 @@ function GroupCreatePost({ userId, groupId, onSuccess }: { userId: string; group
                 <input
                   value={mediaUrl}
                   onChange={(e) => setMediaUrl(e.target.value)}
-                  placeholder="Paste media URL here..."
+                  placeholder={postType === "video" ? "Paste video URL or YouTube link..." : "Paste image URL here..."}
                   className="sn-input flex-1 text-sm"
                 />
               </div>
@@ -319,7 +320,6 @@ export default function GroupDetail() {
 // ─── Group Post Card ──────────────────────────────────────────────────────────
 function GroupPostCard({ post, currentUserId, onRefresh }: { post: any; currentUserId: string | null; onRefresh: () => void }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const [vidFailed, setVidFailed] = useState(false);
   const { data: author } = trpc.users.getById.useQuery({ id: post.authorId }, { staleTime: 300_000, retry: false });
   const deleteMutation = trpc.posts.delete.useMutation({ onSuccess: () => { toast.success("Post deleted"); onRefresh(); } });
 
@@ -351,8 +351,8 @@ function GroupPostCard({ post, currentUserId, onRefresh }: { post: any; currentU
       {post.imageUrl && !imgFailed && (
         <img src={post.imageUrl} alt="" className="w-full rounded-xl max-h-60 object-cover" onError={() => setImgFailed(true)} />
       )}
-      {post.videoUrl && !vidFailed && (
-        <video src={post.videoUrl} controls playsInline className="w-full rounded-xl max-h-60" onError={() => setVidFailed(true)} />
+      {post.videoUrl && (
+        <VideoMedia videoUrl={post.videoUrl} className="mt-2" />
       )}
       <p className="text-xs text-muted-foreground mt-2">{post.likesCount} likes · {post.commentsCount} comments</p>
     </div>

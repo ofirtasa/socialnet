@@ -83,6 +83,33 @@ npm start
 
 This serves the compiled app from `dist/` on port 3000 or the next available port.
 
+**Option C: Docker (recommended for consistent demo environment)**
+
+1. Create `.env` (same as above).
+2. Build and run app container:
+
+```bash
+docker compose up --build -d app
+```
+
+3. (Optional, one-time) seed demo data inside containerized environment:
+
+```bash
+docker compose run --rm --profile tools seed
+```
+
+4. Open:
+
+```text
+http://localhost:3000
+```
+
+5. Stop containers:
+
+```bash
+docker compose down
+```
+
 ### 6. Demo accounts
 
 | Username | Password | Role |
@@ -173,6 +200,12 @@ npm start
 ```
 
 `npm start` serves the compiled app from `dist/`.
+
+## Docker Files
+
+- `Dockerfile` multi-stage build (runtime + optional seed target)
+- `docker-compose.yml` app service + optional seed service
+- `.dockerignore` reduce build context size
 
 ## Notes
 

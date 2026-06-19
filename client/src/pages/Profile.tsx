@@ -3,6 +3,7 @@ import { useParams } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useLocalAuth } from "@/contexts/AuthContext";
 import Layout from "@/components/Layout";
+import VideoMedia from "../components/VideoMedia";
 import { toast } from "sonner";
 import { Camera, Edit2, UserPlus, UserCheck, MessageCircle, Check, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -270,7 +271,7 @@ export default function Profile() {
                 <img src={post.imageUrl} alt="" className="w-full rounded-xl max-h-60 object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
               )}
               {post.videoUrl && (
-                <video src={post.videoUrl} controls playsInline className="w-full rounded-xl max-h-60" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                <VideoMedia videoUrl={post.videoUrl} className="mt-2" />
               )}
               <p className="text-xs text-muted-foreground mt-2">
                 {formatDistanceToNow(new Date(post.createdAt), { addSuffix: true })} · {post.likesCount} likes · {post.commentsCount} comments

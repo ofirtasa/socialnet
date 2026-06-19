@@ -33,7 +33,7 @@ export default function Chat() {
   const params = useParams<{ userId: string }>();
   const targetUserId = params.userId || null;
   const [, navigate] = useLocation();
-  const { user } = useLocalAuth();
+  const { user, loading } = useLocalAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -207,6 +207,12 @@ export default function Chat() {
   const conversationIds = Array.from(
     new Set([...(conversationPartners || []).map(String), ...friendIds])
   ).filter((id) => id !== user?.id);
+
+  if (loading) return (
+    <Layout>
+      <div className="flex items-center justify-center h-64 text-muted-foreground">Checking session...</div>
+    </Layout>
+  );
 
   if (!user) return (
     <Layout>
