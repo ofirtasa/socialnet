@@ -24,6 +24,8 @@ export function LocalAuthProvider({ children }: { children: React.ReactNode }) {
   const { data, isLoading, refetch } = trpc.auth.getLocalUser.useQuery(undefined, {
     retry: false,
     staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   // Ensure id is always a string

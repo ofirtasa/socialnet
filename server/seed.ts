@@ -80,17 +80,23 @@ export async function runSeed() {
   await connectMongoDB();
   console.log("🌱 Starting MongoDB seed...");
 
-  // Clear existing demo data
-  await Promise.all([
-    UserModel.deleteMany({ loginMethod: "local" }),
-    PostModel.deleteMany({}),
-    CommentModel.deleteMany({}),
-    LikeModel.deleteMany({}),
-    GroupModel.deleteMany({}),
-    MessageModel.deleteMany({}),
-    FriendshipModel.deleteMany({}),
-    SessionModel.deleteMany({}),
-  ]);
+  // Optional hard reset for demo-only environments.
+  const allowReset = process.env.SEED_RESET === "true";
+  if (allowReset) {
+    console.warn("⚠️ SEED_RESET=true detected. Existing data will be removed before seeding.");
+    await Promise.all([
+      UserModel.deleteMany({ loginMethod: "local" }),
+      PostModel.deleteMany({}),
+      CommentModel.deleteMany({}),
+      LikeModel.deleteMany({}),
+      GroupModel.deleteMany({}),
+      MessageModel.deleteMany({}),
+      FriendshipModel.deleteMany({}),
+      SessionModel.deleteMany({}),
+    ]);
+  } else {
+    console.log("ℹ️ Non-destructive mode: existing data is preserved.");
+  }
 
   // Create users
   console.log("👥 Creating users...");
@@ -99,22 +105,28 @@ export async function runSeed() {
     const passwordHash = await bcrypt.hash(u.password, 10);
     const daysAgo = Math.floor(Math.random() * 180);
     const createdAt = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-    const user = await UserModel.create({
-      username: u.username,
-      passwordHash,
-      name: u.name,
-      email: u.email,
-      bio: u.bio,
-      avatarUrl: u.avatarUrl,
-      loginMethod: "local",
-      role: (u as any).role || "user",
-      createdAt,
-      updatedAt: createdAt,
-      lastSignedIn: createdAt,
-    });
+    const user = await UserModel.findOneAndUpdate(
+      { username: u.username },
+      {
+        $setOnInsert: {
+          username: u.username,
+          passwordHash,
+          name: u.name,
+          email: u.email,
+          bio: u.bio,
+          avatarUrl: u.avatarUrl,
+          loginMethod: "local",
+          role: (u as any).role || "user",
+          createdAt,
+          updatedAt: createdAt,
+          lastSignedIn: createdAt,
+        },
+      },
+      { new: true, upsert: true }
+    );
     createdUsers.push(user);
   }
-  console.log(`✅ Created ${createdUsers.length} users`);
+  console.log(`✅ Upserted ${createdUsers.length} users`);
 
   // Create groups
   console.log("🏘️ Creating groups...");
@@ -130,18 +142,24 @@ export async function runSeed() {
         memberList.push({ userId: u._id, role: "member", status: "approved", joinedAt: new Date() });
       }
     }
-    const group = await GroupModel.create({
-      name: g.name,
-      description: g.description,
-      coverUrl: g.coverUrl,
-      isPrivate: g.isPrivate,
-      managerId: manager._id,
-      members: memberList,
-      membersCount: memberList.length,
-    });
+    const group = await GroupModel.findOneAndUpdate(
+      { name: g.name },
+      {
+        $setOnInsert: {
+          name: g.name,
+          description: g.description,
+          coverUrl: g.coverUrl,
+          isPrivate: g.isPrivate,
+          managerId: manager._id,
+          members: memberList,
+          membersCount: memberList.length,
+        },
+      },
+      { new: true, upsert: true }
+    );
     createdGroups.push(group);
   }
-  console.log(`✅ Created ${createdGroups.length} groups`);
+  console.log(`✅ Upserted ${createdGroups.length} groups`);
 
   // Create posts
   console.log("📝 Creating posts...");
@@ -152,6 +170,17 @@ export async function runSeed() {
     const group = Math.random() > 0.4 ? createdGroups[Math.floor(Math.random() * createdGroups.length)] : null;
     const daysAgo = Math.floor(Math.random() * 120);
     const createdAt = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
+    const existingPost = await PostModel.findOne({
+      authorId: author._id,
+      content: p.content,
+      postType: p.postType,
+    });
+
+    if (existingPost) {
+      createdPosts.push(existingPost);
+      continue;
+    }
+
     const post = await PostModel.create({
       authorId: author._id,
       groupId: group?._id,
@@ -166,7 +195,7 @@ export async function runSeed() {
     });
     createdPosts.push(post);
   }
-  console.log(`✅ Created ${createdPosts.length} posts`);
+  console.log(`✅ Ensured ${createdPosts.length} seed posts`);
 
   // Add likes
   console.log("❤️ Adding likes...");
@@ -187,7 +216,10 @@ export async function runSeed() {
     for (let c = 0; c < commentCount; c++) {
       const author = createdUsers[Math.floor(Math.random() * createdUsers.length)];
       const content = DEMO_COMMENTS[Math.floor(Math.random() * DEMO_COMMENTS.length)];
-      await CommentModel.create({ postId: post._id, authorId: author._id, content });
+      const existingComment = await CommentModel.findOne({ postId: post._id, authorId: author._id, content });
+      if (!existingComment) {
+        await CommentModel.create({ postId: post._id, authorId: author._id, content });
+      }
     }
     // Update comment count
     const count = await CommentModel.countDocuments({ postId: post._id });
@@ -198,14 +230,20 @@ export async function runSeed() {
   console.log("🤝 Creating friendships...");
   const friendPairs = [[0,1],[0,2],[1,2],[1,3],[2,4],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[0,9],[1,6],[2,7],[3,8]];
   for (const [a, b] of friendPairs) {
-    try {
-      await FriendshipModel.create({ requesterId: createdUsers[a]._id, addresseeId: createdUsers[b]._id, status: "accepted" });
-    } catch {}
+    const existingFriendship = await FriendshipModel.findOne({ requesterId: createdUsers[a]._id, addresseeId: createdUsers[b]._id });
+    if (!existingFriendship) {
+      try {
+        await FriendshipModel.create({ requesterId: createdUsers[a]._id, addresseeId: createdUsers[b]._id, status: "accepted" });
+      } catch {}
+    }
   }
   // Some pending
-  try {
-    await FriendshipModel.create({ requesterId: createdUsers[0]._id, addresseeId: createdUsers[5]._id, status: "pending" });
-  } catch {}
+  const existingPending = await FriendshipModel.findOne({ requesterId: createdUsers[0]._id, addresseeId: createdUsers[5]._id });
+  if (!existingPending) {
+    try {
+      await FriendshipModel.create({ requesterId: createdUsers[0]._id, addresseeId: createdUsers[5]._id, status: "pending" });
+    } catch {}
+  }
 
   // Create messages
   console.log("✉️ Creating messages...");
@@ -215,7 +253,10 @@ export async function runSeed() {
       const senderId = m % 2 === 0 ? createdUsers[a]._id : createdUsers[b]._id;
       const receiverId = m % 2 === 0 ? createdUsers[b]._id : createdUsers[a]._id;
       const content = DEMO_MESSAGES[Math.floor(Math.random() * DEMO_MESSAGES.length)];
-      await MessageModel.create({ senderId, receiverId, content, isRead: true });
+      const existingMessage = await MessageModel.findOne({ senderId, receiverId, content });
+      if (!existingMessage) {
+        await MessageModel.create({ senderId, receiverId, content, isRead: true });
+      }
     }
   }
 

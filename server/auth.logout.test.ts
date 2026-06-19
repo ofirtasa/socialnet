@@ -14,11 +14,12 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
   const clearedCookies: CookieCall[] = [];
 
   const user: AuthenticatedUser = {
-    id: 1,
+    id: "1",
     openId: "sample-user",
+    username: "sample-user",
     email: "sample@example.com",
     name: "Sample User",
-    loginMethod: "manus",
+    loginMethod: "oauth",
     role: "user",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -49,7 +50,7 @@ describe("auth.logout", () => {
     const result = await caller.auth.logout();
 
     expect(result).toEqual({ success: true });
-    // Our logout clears both sn_session and the Manus OAuth COOKIE_NAME
+    // Our logout clears both sn_session and the OAuth COOKIE_NAME
     expect(clearedCookies.length).toBeGreaterThanOrEqual(1);
     const cookieNames = clearedCookies.map(c => c.name);
     expect(cookieNames).toContain(COOKIE_NAME);

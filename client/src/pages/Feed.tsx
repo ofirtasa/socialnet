@@ -9,13 +9,13 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { formatDistanceToNow } from "date-fns";
+import VideoMedia from "../components/VideoMedia";
 
 type PostType = "text" | "image" | "video" | "canvas";
 
 // Media component with state-based error handling
 function PostMedia({ imageUrl, videoUrl }: { imageUrl?: string | null; videoUrl?: string | null }) {
   const [imgError, setImgError] = useState(false);
-  const [vidError, setVidError] = useState(false);
 
   if (imageUrl && !imgError) {
     return (
@@ -29,20 +29,15 @@ function PostMedia({ imageUrl, videoUrl }: { imageUrl?: string | null; videoUrl?
       </div>
     );
   }
-  if (videoUrl && !vidError) {
+  if (videoUrl) {
     return (
-      <div className="mb-3 -mx-5 sm:mx-0">
-        <video
-          src={videoUrl}
-          controls
-          playsInline
-          className="w-full max-h-64 sm:max-h-80 sm:rounded-xl"
-          onError={() => setVidError(true)}
-        />
-      </div>
+      <VideoMedia
+        videoUrl={videoUrl}
+        className="mb-3 -mx-5 sm:mx-0"
+      />
     );
   }
-  if ((imageUrl && imgError) || (videoUrl && vidError)) {
+  if (imageUrl && imgError) {
     return (
       <div className="mb-3 p-3 bg-secondary rounded-xl text-xs text-muted-foreground flex items-center gap-2">
         <span>⚠️</span> Media could not be loaded — check the URL
@@ -261,7 +256,7 @@ function CreatePost({ userId, onSuccess }: { userId: string; onSuccess: () => vo
                 <input
                   value={mediaUrl}
                   onChange={(e) => setMediaUrl(e.target.value)}
-                  placeholder={mediaType === "image" ? "Paste image URL (https://...)" : "Paste video URL (https://...)"}
+                  placeholder={mediaType === "image" ? "Paste image URL (https://...)" : "Paste video URL or YouTube link (https://...)"}
                   className="sn-input text-sm w-full"
                   type="url"
                 />
