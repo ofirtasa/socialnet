@@ -10,8 +10,6 @@ SocialNet is a final-project social network built with Node.js, Express, React, 
 npm install
 ```
 
-The repository includes `.npmrc` with `legacy-peer-deps=true` because one Vite helper package has an older peer dependency range. This lets a clean examiner machine install with the plain `npm install` command.
-
 ### 2. Configure environment variables
 
 Create `.env` in the project root:
